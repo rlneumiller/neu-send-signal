@@ -23,21 +23,47 @@ const DEFAULT_MESSAGE: &str = "This is the default message from neu-send-signal"
                   "
 )]
 struct Args {
-    /// Message text. If omitted, a default message is used.
+    /// Message text. Must be a single quoted string unless --shell-safe or --raw is used.
     #[arg(value_name = "MESSAGE")]
     message: Vec<String>,
+
+    /// Allow unquoted multi-word messages (auto-joined).
+    #[arg(long)]
+    shell_safe: bool,
+
+    /// Accept message exactly as provided, with no validation or joining rules.
+    #[arg(long)]
+    raw: bool,
 }
+
 
 fn main() {
     let args = Args::parse();
 
-    let phone = env::var("CALLMEBOT_MYPHONE").expect("CALLMEBOT_MYPHONE must be set");
-    let apikey = env::var("CALLMEBOT_APIKEY").expect("CALLMEBOT_APIKEY must be set");
+    // Enforce quoting unless --shell-safe or --raw is used
+    if !args.shell_safe && !args.raw && args.message.len() > 1 {
+        eprintln!("Error: Message text must be provided as a single quoted string.");
+        eprintln!("Hint: Use --shell-safe for auto-joining or --raw for literal input.");
+        eprintln!("Example: neu-send-signal \"Hello from neu-send-signal\"");
+        std::process::exit(1);
+    }
+
+    let phone = env::var("CALLMEBOT_MYPHONE")
+        .expect("CALLMEBOT_MYPHONE must be set");
+    let apikey = env::var("CALLMEBOT_APIKEY")
+        .expect("CALLMEBOT_APIKEY must be set");
 
     let message = if args.message.is_empty() {
         DEFAULT_MESSAGE.to_string()
-    } else {
+    } else if args.raw {
+        // Raw mode: take arguments exactly as provided, joined with spaces
         args.message.join(" ")
+    } else if args.shell_safe {
+        // Shell-safe mode: join safely
+        args.message.join(" ")
+    } else {
+        // Strict mode: must be a single quoted string
+        args.message[0].clone()
     };
 
     let encoded = encode(&message);
@@ -47,8 +73,6 @@ fn main() {
         phone, apikey, encoded
     );
 
-    // println!("→ Message: {}", message);
-    
     match get(&url) {
         Ok(_) => println!("✓ Message Sent\n"),
         Err(e) => eprintln!("✗ Request failed: {}", e),
