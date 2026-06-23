@@ -6,11 +6,26 @@ use reqwest::blocking::get;
 const DEFAULT_MESSAGE: &str = "This is the default message from neu-send-signal";
 
 #[derive(Parser, Debug)]
-#[command(author, version, about)]
+#[command(
+    author,
+    version,
+    about = "Send a Signal message via CallMeBot.",
+    long_about = "A tiny Rust CLI that sends a Signal message through CallMeBot.\n\
+                  If no message text is provided, a default message is used.\n\
+                  \n\
+                  REQUIRED ENVIRONMENT VARIABLES:\n\
+                    • CALLMEBOT_MYPHONE  – Your CallMeBot phone ID (UUID-like string)\n\
+                    • CALLMEBOT_APIKEY   – Your CallMeBot API key\n\
+                  \n\
+                  Example:\n\
+                    export CALLMEBOT_MYPHONE=\"12345678-1234-1234-1234-1234567890ab\"\n\
+                    export CALLMEBOT_APIKEY=\"123456\"\n\
+                  "
+)]
 struct Args {
-    /// Message text is optional but recommended, as the default is probably not what you want.
-    #[arg(long)]
-    text: Option<String>,
+    /// Message text. If omitted, a default message is used.
+    #[arg(value_name = "MESSAGE")]
+    message: Vec<String>,
 }
 
 fn main() {
@@ -18,7 +33,13 @@ fn main() {
 
     let phone = env::var("CALLMEBOT_MYPHONE").expect("CALLMEBOT_MYPHONE must be set");
     let apikey = env::var("CALLMEBOT_APIKEY").expect("CALLMEBOT_APIKEY must be set");
-    let message = args.text.unwrap_or_else(|| DEFAULT_MESSAGE.to_string());
+
+    let message = if args.message.is_empty() {
+        DEFAULT_MESSAGE.to_string()
+    } else {
+        args.message.join(" ")
+    };
+
     let encoded = encode(&message);
 
     let url = format!(
@@ -26,14 +47,10 @@ fn main() {
         phone, apikey, encoded
     );
 
-    // println!("→ Sending Signal message via neu-send-signal");
     // println!("→ Message: {}", message);
     
     match get(&url) {
-        Ok(_resp) => {
-                println!("✓ Message Sent\n");
-            }
-        Err(request_error) => eprintln!("✗ Request failed: {}", request_error),
+        Ok(_) => println!("✓ Message Sent\n"),
+        Err(e) => eprintln!("✗ Request failed: {}", e),
     }
 }
-
